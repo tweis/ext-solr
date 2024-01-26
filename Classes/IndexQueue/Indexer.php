@@ -27,7 +27,6 @@ use ApacheSolrForTypo3\Solr\Exception as EXTSolrException;
 use ApacheSolrForTypo3\Solr\FieldProcessor\Service;
 use ApacheSolrForTypo3\Solr\FrontendEnvironment;
 use ApacheSolrForTypo3\Solr\FrontendEnvironment\Exception\Exception as FrontendEnvironmentException;
-use ApacheSolrForTypo3\Solr\FrontendEnvironment\Tsfe;
 use ApacheSolrForTypo3\Solr\IndexQueue\Exception\IndexingException;
 use ApacheSolrForTypo3\Solr\NoSolrConnectionFoundException;
 use ApacheSolrForTypo3\Solr\System\Logging\SolrLogManager;
@@ -257,16 +256,7 @@ class Indexer extends AbstractIndexer
             return null;
         }
 
-        $pidToUse = $this->getPageIdOfItem($item);
-
-        $globalTsfe = GeneralUtility::makeInstance(Tsfe::class);
-        $specializedTsfe = $globalTsfe->getTsfeByPageIdAndLanguageId($pidToUse, $language, $item->getRootPageUid());
-
-        if ($specializedTsfe === null) {
-            return null;
-        }
-
-        return $specializedTsfe->sys_page->getLanguageOverlay($item->getType(), $itemRecord);
+        return $GLOBALS['TSFE']->sys_page->getLanguageOverlay($item->getType(), $itemRecord);
     }
 
     protected function isAFreeContentModeItemRecord(Item $item): bool
@@ -297,7 +287,7 @@ class Indexer extends AbstractIndexer
     protected function getItemTypeConfiguration(Item $item, int $language = 0): array
     {
         $indexConfigurationName = $item->getIndexingConfigurationName();
-        $fields = $this->getFieldConfigurationFromItemRecordPage($item, $language, $indexConfigurationName);
+        $fields = $this->getFieldConfigurationFromItemRecordPage($item, $indexConfigurationName);
         if (!$this->isRootPageIdPartOfRootLine($item) || count($fields) === 0) {
             $fields = $this->getFieldConfigurationFromItemRootPage($item, $language, $indexConfigurationName);
             if (count($fields) === 0) {
@@ -312,13 +302,13 @@ class Indexer extends AbstractIndexer
     /**
      * The method retrieves the field configuration of the items record page id (pid).
      */
-    protected function getFieldConfigurationFromItemRecordPage(Item $item, int $language, string $indexConfigurationName): array
+    protected function getFieldConfigurationFromItemRecordPage(Item $item, string $indexConfigurationName): array
     {
         try {
             $pageId = $this->getPageIdOfItem($item);
-            $solrConfiguration = $this->frontendEnvironment->getSolrConfigurationFromPageId($pageId, $language, $item->getRootPageUid());
-            return $solrConfiguration->getIndexQueueFieldsConfigurationByConfigurationName($indexConfigurationName);
-        } catch (Throwable) {
+            $solrConfiguration = $this->frontendEnvironment->getSolrConfigurationFromPageId($pageId, $item->getRootPageUid());
+            return $solrConfiguration->getIndexQueueFieldsConfigurationByConfigurationName($indexConfigurationName, []);
+        } catch (Throwable $e) {
             return [];
         }
     }
@@ -382,8 +372,7 @@ class Indexer extends AbstractIndexer
         if (!is_null($itemRecord)) {
             $itemIndexingConfiguration = $this->getItemTypeConfiguration($item, $language);
             $document = $this->getBaseDocument($item, $itemRecord);
-            $tsfe = $this->getTsfeByItemAndLanguageId($item, $language);
-            $document = $this->addDocumentFieldsFromTyposcript($document, $itemIndexingConfiguration, $itemRecord, $tsfe);
+            $document = $this->addDocumentFieldsFromTyposcript($document, $itemIndexingConfiguration, $itemRecord);
         }
 
         return $document;
@@ -394,7 +383,7 @@ class Indexer extends AbstractIndexer
         int $language = 0,
     ): TypoScriptFrontendController {
         $pidToUse = $this->getPageIdOfItem($item);
-        return GeneralUtility::makeInstance(Tsfe::class)
+        return $GLOBALS['TSFE']
             ->getTsfeByPageIdAndLanguageId(
                 $pidToUse,
                 $language,
